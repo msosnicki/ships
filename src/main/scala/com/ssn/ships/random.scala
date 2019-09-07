@@ -31,7 +31,7 @@ object random {
       }
     } yield ship
 
-  def createRandomShips[F[_]: Sync](sizes: Set[Int]): F[PlayerShips] =
+  def randomShips[F[_]: Sync](sizes: Set[Int]): F[PlayerShips] =
     createShips(sizes)(randomShip[F])
 
   def createShips[F[_]](sizes: Set[Int])(create: Int => F[Ship])(implicit S: Sync[F]): F[PlayerShips] = {

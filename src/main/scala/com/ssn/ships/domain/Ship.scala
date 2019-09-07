@@ -3,7 +3,7 @@ package com.ssn.ships.domain
 import cats.syntax.option._
 import scala.collection.breakOut
 
-//TODO: maybe prohibit from manual creation (other than Ship.create)
+//TODO: maybe prohibit from manual creation to validate(f.e creation only via Ship.create)
 case class Ship(points: Set[Point]) {
   def contains(p: Point): Boolean        = points.contains(p)
   def sunk(guesses: Set[Point]): Boolean = points.intersect(guesses) == points

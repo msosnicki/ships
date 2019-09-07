@@ -4,13 +4,24 @@ import atto._
 import Atto._
 import atto.ParseResult.Done
 
+import scala.collection.breakOut
+
 //TODO: also here could be validated on construction (same story with ships)
 case class Point(x: Int, y: Int)
 
 object Point {
 
+  private val Max = 9
+
+  def proximity(point: Point): Set[Point] =
+    (for {
+      x <- math.max(0, point.x - 1) to math.min(Max, point.x + 1)
+      y <- math.max(0, point.y - 1) to math.min(Max, point.y + 1)
+      p = Point(x, y)
+    } yield p)(breakOut)
+
   def isValid(point: Point): Boolean =
-    point.x >= 0 && point.x <= 9 && point.y >= 0 && point.y <= 9
+    point.x >= 0 && point.x <= Max && point.y >= 0 && point.y <= Max
 
   def pointsAtDistance(point: Point, distance: Int, horizontal: Boolean): List[Point] =
     if (horizontal)
@@ -23,8 +34,6 @@ object Point {
   /**
     * Parses so that A1 -> Point(0, 0) and C8 -> Point(3, 8)
     *  Allowed only up to J10 -> Point(9, 9)
-    * @param str
-    * @return
     */
   def parse(str: String): Option[Point] =
     parser

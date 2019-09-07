@@ -3,9 +3,10 @@ package com.ssn.ships.game
 import cats.Monad
 import cats.implicits._
 import com.ssn.ships.domain._
+import com.ssn.ships.player.PlayerBehavior
 import fs2._
 
-class GameInterpreter[F[_]](playerA: PlayerBehavior[F], playerB: PlayerBehavior[F])(
+final class GameInterpreter[F[_]](playerA: PlayerBehavior[F], playerB: PlayerBehavior[F])(
     implicit M: Monad[F],
     C: Stream.Compiler[F, F]
 ) {
@@ -15,10 +16,9 @@ class GameInterpreter[F[_]](playerA: PlayerBehavior[F], playerB: PlayerBehavior[
     */
   def play: F[(Player, GameState)] =
     for {
-      init <- pickShipsPhase
-      processTurns = turns(init)
+      initialState <- pickShipsPhase
       res <- playerA.turns
-        .through2(playerB.turns)(processTurns)
+        .through2(playerB.turns)(gameLoop(initialState))
         .compile
         .toList
     } yield {
@@ -36,9 +36,9 @@ class GameInterpreter[F[_]](playerA: PlayerBehavior[F], playerB: PlayerBehavior[
     } yield GameState(PlayerState(a, Set.empty), PlayerState(b, Set.empty), PlayerA)
 
   /**
-    * Main game loop, alternates player turns
+    * Main game loop, alternates player turns until game ends
     */
-  private def turns(init: GameState): Pipe2[F, Point, Point, (GameState, ShotResult)] = (p1, p2) => {
+  private def gameLoop(init: GameState): Pipe2[F, Point, Point, (GameState, ShotResult)] = (p1, p2) => {
     def loop(state: GameState): Pull[F, (GameState, ShotResult), Unit] = {
       val (firstPlayer, feedback) = if (state.turnOf == PlayerA) (p1, playerA.feedback _) else (p2, playerB.feedback _)
       playerTurn(state, firstPlayer, feedback).flatMap(loop)
@@ -55,16 +55,17 @@ class GameInterpreter[F[_]](playerA: PlayerBehavior[F], playerB: PlayerBehavior[
       actions: Actions[F],
       feedback: (Point, ShotResult) => F[Unit]
   ): Pull[F, (GameState, ShotResult), GameState] = {
-    def turnEnded(next: GameState) = Pull.done.map(_ => next)
+    def provideFeedback(point: Point, turnResult: TurnResult): Pull[F, INothing, Unit] =
+      Pull.eval(turnResult.traverse_ { case (_, sr) => feedback(point, sr) })
     actions.pull.uncons1.flatMap {
       case Some((point, tail)) =>
         Pull
           .pure[F, TurnResult](state.shot(state.turnOf, point))
-          .flatTap(result => Pull.eval(result.traverse_ { case (_, sr) => feedback(point, sr) }))
+          .flatTap(provideFeedback(point, _))
           .flatMap {
             case Some((nextState, result)) if nextState.turnOf == state.turnOf =>
-              val pullResult = Pull.output1[F, (GameState, ShotResult)]((nextState -> result))
-              if (result == GameWon) pullResult *> turnEnded(nextState)
+              val pullResult = Pull.output1[F, (GameState, ShotResult)](nextState -> result)
+              if (result == GameWon) pullResult *> Pull.done.map(_ => nextState)
               else pullResult *> playerTurn(nextState, tail, feedback)
             case Some((nextState, result)) =>
               Pull.output1(nextState -> result).map(_ => nextState)
@@ -73,5 +74,7 @@ class GameInterpreter[F[_]](playerA: PlayerBehavior[F], playerB: PlayerBehavior[
       case None => turnEnded(state)
     }
   }
+
+  private def turnEnded(nextState: GameState): Pull[Pure, INothing, GameState] = Pull.done.map(_ => nextState)
 
 }

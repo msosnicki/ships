@@ -10,7 +10,7 @@ case class GameState(playerA: PlayerState, playerB: PlayerState, turnOf: Player)
         case None                                  => Miss
         case Some(_) if oldGuesses.contains(point) => Miss
         case Some(ship) =>
-          if (defender.allSunk(newGuesses)) GameWon
+          if (defender.enemyWon(newGuesses)) GameWon
           else if (ship.sunk(newGuesses)) Sunk
           else Hit
       }
